@@ -17,7 +17,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.opentelemetry.io/otel"
 	"golang.org/x/sync/semaphore"
-	"golang.org/x/time/rate"
 )
 
 type Server struct {
@@ -27,7 +26,6 @@ type Server struct {
 	Consumer      *consumer.Consumer
 	maxSubRate    float64
 	seq           int64
-	perIPLimiters map[string]*rate.Limiter
 }
 
 var upgrader = websocket.Upgrader{
@@ -44,7 +42,6 @@ func NewServer(maxSubRate float64) (*Server, error) {
 	s := Server{
 		Subscribers:   make(map[int64]*Subscriber),
 		maxSubRate:    maxSubRate,
-		perIPLimiters: make(map[string]*rate.Limiter),
 	}
 
 	return &s, nil
@@ -254,12 +251,6 @@ func (s *Server) HandleSubscribe(c echo.Context) error {
 			log.Info("shutting down subscriber")
 			return nil
 		case msg := <-sub.outbox:
-			err := sub.rl.Wait(ctx)
-			if err != nil {
-				log.Error("failed to wait for rate limiter", "error", err)
-				return fmt.Errorf("failed to wait for rate limiter: %w", err)
-			}
-
 			ws.SetWriteDeadline(time.Now().Add(writeWait))
 
 			// When compression is enabled, the msg is a zstd compressed message

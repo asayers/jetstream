@@ -13,7 +13,6 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus"
-	"golang.org/x/time/rate"
 )
 
 type WantedCollections struct {
@@ -40,8 +39,6 @@ type Subscriber struct {
 	cursor              *int64
 	compress            bool
 	maxMessageSizeBytes uint32
-
-	rl *rate.Limiter
 
 	deliveredCounter prometheus.Counter
 	bytesCounter     prometheus.Counter
@@ -205,12 +202,6 @@ func (s *Server) AddSubscriber(ws *websocket.Conn, realIP string, opts *Subscrib
 	s.lk.Lock()
 	defer s.lk.Unlock()
 
-	lim := s.perIPLimiters[realIP]
-	if lim == nil {
-		lim = rate.NewLimiter(rate.Limit(s.maxSubRate), int(s.maxSubRate))
-		s.perIPLimiters[realIP] = lim
-	}
-
 	sub := Subscriber{
 		ws:                  ws,
 		realIP:              realIP,
@@ -224,7 +215,6 @@ func (s *Server) AddSubscriber(ws *websocket.Conn, realIP string, opts *Subscrib
 		maxMessageSizeBytes: opts.MaxMessageSizeBytes,
 		deliveredCounter:    eventsDelivered.WithLabelValues(realIP),
 		bytesCounter:        bytesDelivered.WithLabelValues(realIP),
-		rl:                  lim,
 	}
 
 	s.Subscribers[s.nextSub] = &sub
